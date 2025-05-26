@@ -436,16 +436,27 @@ const buttonVariants = cva(
 
 ## 🧪 Testing Strategy
 
+### Testing Framework: Vitest
+
+The boilerplate uses **Vitest** as the primary testing framework, providing:
+
+- ⚡ **Fast execution** - Native ESM support and hot module replacement
+- 🔧 **Vite integration** - Same configuration as your build tool
+- 🧪 **Jest compatibility** - Drop-in replacement for Jest APIs
+- 📊 **Built-in coverage** - Code coverage reports without additional setup
+- 🔍 **TypeScript support** - First-class TypeScript integration
+
 ### Component Testing
 
 ```typescript
 // Example: Testing a form component
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { vi } from "vitest";
 import { PersonalInformationForm } from "./personal-info-form";
 
 test("submits form with valid data", async () => {
-  const mockMutate = jest.fn();
-  jest.mock("@/api/mutations/use-put-personal-information-mutation", () => ({
+  const mockMutate = vi.fn();
+  vi.mock("@/api/mutations/use-put-personal-information-mutation", () => ({
     usePutPersonalInformationMutation: () => ({
       mutate: mockMutate,
       isPending: false,
@@ -476,11 +487,16 @@ test("submits form with valid data", async () => {
 ```typescript
 // Example: Testing custom hooks
 import { renderHook, act } from "@testing-library/react";
+import { vi } from "vitest";
 import { useHandleMutationResult } from "./use-handle-mutation-result";
 
 test("shows success message and redirects", () => {
-  const mockToast = jest.fn();
-  const mockNavigate = jest.fn();
+  const mockToast = vi.fn();
+  const mockNavigate = vi.fn();
+
+  // Mock dependencies
+  vi.mock("sonner", () => ({ toast: { success: mockToast } }));
+  vi.mock("react-router-dom", () => ({ useNavigate: () => mockNavigate }));
 
   const { result } = renderHook(() =>
     useHandleMutationResult({
@@ -502,18 +518,81 @@ test("shows success message and redirects", () => {
 
 ```typescript
 // Example: Mocking API responses
-import { rest } from "msw";
+import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 
 const server = setupServer(
-  rest.put("/api/personal-information", (req, res, ctx) => {
-    return res(ctx.json({ id: "1", ...req.body }));
+  http.put("/api/personal-information", async ({ request }) => {
+    const body = await request.json();
+    return HttpResponse.json({ id: "1", ...body });
   })
 );
 
 beforeAll(() => server.listen());
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
+```
+
+### Test Setup Configuration
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
+import { resolve } from "path";
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    css: true,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      exclude: ["node_modules/", "src/test/", "**/*.d.ts", "**/*.config.*"],
+    },
+  },
+  resolve: {
+    alias: {
+      "@": resolve(__dirname, "./src"),
+    },
+  },
+});
+```
+
+```typescript
+// src/test/setup.ts
+import { vi } from "vitest";
+import "@testing-library/jest-dom";
+
+// Mock Firebase
+vi.mock("@/api/firebase", () => ({
+  auth: {},
+  db: {},
+}));
+
+// Global test utilities
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
+```
+
+### Testing Scripts
+
+```json
+// package.json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  }
+}
 ```
 
 ## 📋 Development Guidelines
